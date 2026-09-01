@@ -107,15 +107,8 @@ jobs:
           mkdir -p "../${DIST_DIR}"
           cp lolcat.exe "../${DIST_DIR}/"
           cp LICENSE "../${DIST_DIR}/" 2>/dev/null || true
-          cp README.md "../${DIST_DIR}/" 2>/dev/null || true
 
           cd ..
-
-          # Create launcher batch script
-          cat > "${DIST_DIR}/lolcat.bat" << 'BATCH'
-          @echo off
-          "%~dp0lolcat.exe" %*
-          BATCH
 
           # Create README
           cat > "${DIST_DIR}/README.md" << EOF
@@ -124,33 +117,24 @@ jobs:
           **Version:** ${VERSION}
           **Source:** https://github.com/${UPSTREAM_REPO}
 
+          ## Installation (Scoop)
+
+          \`\`\`
+          scoop bucket add latipun7 https://github.com/latipun7/scoop-bucket
+          scoop install lolcat
+          \`\`\`
+
+          ## Manual Installation
+
+          1. Download \`${DIST_DIR}.zip\`
+          2. Extract and add to PATH
+
           ## Usage
 
-          ### Command Prompt (cmd.exe)
           \`\`\`
           echo Hello World | lolcat.exe
           type myfile.txt | lolcat.exe
-          dir | lolcat.exe
           \`\`\`
-
-          ### PowerShell
-          \`\`\`
-          echo "Hello World" | .\lolcat.exe
-          Get-Content myfile.txt | .\lolcat.exe
-          \`\`\`
-
-          ### Add to PATH (optional)
-          1. Extract this folder to a permanent location (e.g., \`C:\\Tools\\lolcat\`)
-          2. Add that folder to your PATH environment variable
-          3. Use \`lolcat\` from anywhere
-
-          ## About
-
-          This is a high-performance C implementation of lolcat.
-          >10x faster and <0.1% as large as the original Ruby version.
-
-          - Original: https://github.com/busyloop/lolcat
-          - C implementation: https://github.com/${UPSTREAM_REPO}
           EOF
 
       - name: Create ZIP
@@ -189,21 +173,25 @@ jobs:
 
             Standalone Windows build of [lolcat](https://github.com/jaseg/lolcat) — the high-performance C implementation.
 
-            ### Installation
+            ### Install via Scoop (Recommended)
+            ```
+            scoop bucket add latipun7 https://github.com/latipun7/scoop-bucket
+            scoop install lolcat
+            ```
+
+            ### Manual Install
             1. Download `lolcat-${{ needs.check-release.outputs.version }}-windows-x64.zip`
-            2. Extract to a folder (e.g., `C:\Tools\lolcat`)
-            3. Add folder to PATH (optional)
+            2. Extract to a folder
+            3. Add folder to PATH
 
             ### Usage
             ```
             echo Hello World | lolcat.exe
             type myfile.txt | lolcat.exe
-            dir | lolcat.exe
             ```
 
             ### What's included
             - `lolcat.exe` — standalone binary (~50KB)
-            - `lolcat.bat` — launcher script
 
             ### Why this build?
             The original [busyloop/lolcat](https://github.com/busyloop/lolcat) is a Ruby gem with no Windows support.
