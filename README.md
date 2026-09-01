@@ -12,43 +12,31 @@ The original [`busyloop/lolcat`](https://github.com/busyloop/lolcat) is a Ruby g
 
 ## Installation
 
+### Scoop (Recommended)
+
+```powershell
+scoop bucket add latipun7 https://github.com/latipun7/scoop-bucket
+scoop install lolcat
+```
+
+### Manual
+
 1. Go to [Releases](../../releases/latest)
 2. Download `lolcat-X.X.X-windows-x64.zip`
 3. Extract to a folder (e.g., `C:\Tools\lolcat`)
-4. (Optional) Add the folder to your PATH
+4. Add the folder to your PATH
 
 ## Usage
 
-### Command Prompt (cmd.exe)
-
-```cmd
-echo Hello World | lolcat.exe
-type myfile.txt | lolcat.exe
-dir | lolcat.exe
-```
-
-### PowerShell
-
 ```powershell
-echo "Hello World" | .\lolcat.exe
-Get-Content myfile.txt | .\lolcat.exe
-Get-ChildItem | .\lolcat.exe
-```
+# Pipe text
+echo Hello World | lolcat.exe
 
-### Add to PATH (recommended)
+# Colorize a file
+type myfile.txt | lolcat.exe
 
-To use `lolcat` from anywhere:
-
-1. Press `Win + R`, type `sysdm.cpl`, press Enter
-2. Go to **Advanced** → **Environment Variables**
-3. Under **User variables**, select **Path**, click **Edit**
-4. Click **New** and add the path to your lolcat folder (e.g., `C:\Tools\lolcat`)
-5. Click **OK** on all dialogs
-6. Restart your terminal
-
-Now you can use:
-```cmd
-echo Hello World | lolcat
+# Colorize directory listing
+dir | lolcat.exe
 ```
 
 ## How It Works
