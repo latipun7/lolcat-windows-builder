@@ -94,14 +94,42 @@ jobs:
           VERSION="${{ needs.check-release.outputs.version }}"
           TAG="${{ needs.check-release.outputs.tag }}"
 
-          # Clone upstream main branch (err.h removed in main)
+          # Clone upstream main branch
           git clone --depth 1 \
             "https://github.com/${UPSTREAM_REPO}.git" lolcat-src
 
           cd lolcat-src
 
-          # Build with _GNU_SOURCE for wcwidth support
-          make lolcat CFLAGS="-std=c11 -Wall -Wextra -O3 -Wno-sign-compare -D_GNU_SOURCE"
+          # Create wcwidth stub for MinGW (wcwidth is POSIX-only)
+          cat > wcwidth_stub.h << 'STUB'
+          #ifndef WCWIDTH_STUB_H
+          #define WCWIDTH_STUB_H
+          #include <wchar.h>
+          /* Minimal wcwidth stub for MinGW */
+          static int wcwidth(wchar_t c) {
+              if (c == 0) return 0;
+              if (c < 32 || (c >= 0x7f && c < 0xa0)) return -1;
+              if (c >= 0x1100 &&
+                  (c <= 0x115f || c == 0x2329 || c == 0x232a ||
+                   (c >= 0x2e80 && c <= 0xa4cf && c != 0x303f) ||
+                   (c >= 0xac00 && c <= 0xd7a3) ||
+                   (c >= 0xf900 && c <= 0xfaff) ||
+                   (c >= 0xfe10 && c <= 0xfe19) ||
+                   (c >= 0xfe30 && c <= 0xfe6f) ||
+                   (c >= 0xff00 && c <= 0xff60) ||
+                   (c >= 0xffe0 && c <= 0xffe6) ||
+                   (c >= 0x1f300 && c <= 0x1f64f) ||
+                   (c >= 0x1f900 && c <= 0x1f9ff) ||
+                   (c >= 0x20000 && c <= 0x2fffd) ||
+                   (c >= 0x30000 && c <= 0x3fffd)))
+                  return 2;
+              return 1;
+          }
+          #endif
+          STUB
+
+          # Build with wcwidth stub included
+          make lolcat CFLAGS="-std=c11 -Wall -Wextra -O3 -Wno-sign-compare -include wcwidth_stub.h"
 
           # Prepare distribution
           DIST_DIR="lolcat-${VERSION}-windows-x64"
