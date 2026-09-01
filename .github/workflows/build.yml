@@ -21,7 +21,7 @@ jobs:
       version: ${{ steps.check.outputs.version }}
       tag: ${{ steps.check.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check upstream for new tag
         id: check
@@ -75,7 +75,7 @@ jobs:
       run:
         shell: msys2 {0}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
@@ -93,8 +93,8 @@ jobs:
           VERSION="${{ needs.check-release.outputs.version }}"
           TAG="${{ needs.check-release.outputs.tag }}"
 
-          # Clone upstream at specific tag
-          git clone --depth 1 --branch "${TAG}" \
+          # Clone upstream main branch (err.h removed in main)
+          git clone --depth 1 \
             "https://github.com/${UPSTREAM_REPO}.git" lolcat-src
 
           cd lolcat-src
@@ -145,7 +145,7 @@ jobs:
           cd ..
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lolcat-windows
           path: lolcat-*-windows-x64.zip
@@ -158,13 +158,13 @@ jobs:
       contents: write
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: lolcat-windows
           path: ./artifacts
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.check-release.outputs.tag }}
           name: "lolcat ${{ needs.check-release.outputs.version }} (Windows)"
@@ -198,7 +198,7 @@ jobs:
             This uses [jaseg/lolcat](https://github.com/jaseg/lolcat), a C reimplementation that's **>10x faster** and **<0.1% the size**.
 
             ---
-            *Built automatically from [jaseg/lolcat](https://github.com/jaseg/lolcat) release ${{ needs.check-release.outputs.tag }}*
+            *Built automatically from [jaseg/lolcat](https://github.com/commits/jaseg/lolcat) main branch, tagged ${{ needs.check-release.outputs.tag }}*
           files: ./artifacts/*
           draft: false
           prerelease: false
