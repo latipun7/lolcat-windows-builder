@@ -100,8 +100,8 @@ jobs:
 
           cd lolcat-src
 
-          # Build
-          make lolcat
+          # Build with _GNU_SOURCE for wcwidth support
+          make lolcat CFLAGS="-std=c11 -Wall -Wextra -O3 -Wno-sign-compare -D_GNU_SOURCE"
 
           # Prepare distribution
           DIST_DIR="lolcat-${VERSION}-windows-x64"
