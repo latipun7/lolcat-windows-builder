@@ -87,6 +87,7 @@ jobs:
             mingw-w64-x86_64-make
             git
             make
+            python
 
       - name: Clone and build lolcat
         run: |
@@ -198,7 +199,7 @@ jobs:
             This uses [jaseg/lolcat](https://github.com/jaseg/lolcat), a C reimplementation that's **>10x faster** and **<0.1% the size**.
 
             ---
-            *Built automatically from [jaseg/lolcat](https://github.com/commits/jaseg/lolcat) main branch, tagged ${{ needs.check-release.outputs.tag }}*
+            *Built automatically from [jaseg/lolcat](https://github.com/jaseg/lolcat) main branch, tagged ${{ needs.check-release.outputs.tag }}*
           files: ./artifacts/*
           draft: false
           prerelease: false
