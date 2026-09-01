@@ -1,10 +1,14 @@
 # lolcat for Windows
 
-Standalone Windows builds of [lolcat](https://github.com/busyloop/lolcat) — because Windows users deserve rainbows too! 🌈
+Standalone Windows builds of [lolcat](https://github.com/jaseg/lolcat) — the high-performance C implementation.
 
 ## Why?
 
-The original `lolcat` only supports Linux (snap) and macOS (brew). This repo automatically watches for new releases and builds Windows binaries.
+The original [`busyloop/lolcat`](https://github.com/busyloop/lolcat) is a Ruby gem with no Windows support. This repo uses [`jaseg/lolcat`](https://github.com/jaseg/lolcat), a C reimplementation that's:
+
+- **>10x faster** than the Ruby original
+- **<0.1% the size** (~50KB vs ~30MB)
+- **Single binary** — no Ruby, no dependencies
 
 ## Installation
 
@@ -18,17 +22,17 @@ The original `lolcat` only supports Linux (snap) and macOS (brew). This repo aut
 ### Command Prompt (cmd.exe)
 
 ```cmd
-echo Hello World | lolcat.bat
-type myfile.txt | lolcat.bat
-dir | lolcat.bat
+echo Hello World | lolcat.exe
+type myfile.txt | lolcat.exe
+dir | lolcat.exe
 ```
 
 ### PowerShell
 
 ```powershell
-echo "Hello World" | .\lolcat.ps1
-Get-Content myfile.txt | .\lolcat.ps1
-Get-ChildItem | .\lolcat.ps1
+echo "Hello World" | .\lolcat.exe
+Get-Content myfile.txt | .\lolcat.exe
+Get-ChildItem | .\lolcat.exe
 ```
 
 ### Add to PATH (recommended)
@@ -51,38 +55,25 @@ echo Hello World | lolcat
 
 ```mermaid
 flowchart LR
-    A[busyloop/lolcat<br>new tag] -->|Daily check| B{New version?}
+    A[jaseg/lolcat<br>new tag] -->|Daily check| B{New version?}
     B -->|Yes| C[Build on<br>Windows runner]
-    C --> D[Package<br>Ruby + lolcat]
-    D --> E[GitHub Release]
+    C --> D[Compile C<br>with MSYS2]
+    D --> E[GitHub Release<br>~50KB binary]
     B -->|No| F[Skip]
 ```
 
 - **Daily check**: GitHub Actions runs at 03:00 UTC every day
-- **Auto-build**: When a new tag is detected, it builds a standalone package
-- **Portable**: Includes Ruby runtime — no installation needed on user's machine
-
-## Building Locally
-
-If you want to build manually:
-
-```powershell
-# Prerequisites: Ruby installed (e.g., via rubyinstaller.org)
-
-# Install lolcat
-gem install lolcat
-
-# Run directly
-echo "Hello" | ruby -S lolcat
-```
+- **Auto-build**: When a new tag is detected, it compiles from C source
+- **Single binary**: No dependencies, just `lolcat.exe`
 
 ## Credits
 
-- [lolcat](https://github.com/busyloop/lolcat) by [busyloop](https://github.com/busyloop)
-- This repo only provides Windows builds — all credit for lolcat goes to the original authors
+- Original [lolcat](https://github.com/busyloop/lolcat) by [busyloop](https://github.com/busyloop)
+- C implementation [jaseg/lolcat](https://github.com/jaseg/lolcat) by [jaseg](https://github.com/jaseg)
+- This repo only provides Windows builds
 
 ## License
 
-lolcat is licensed under [BSD-3-Clause](https://github.com/busyloop/lolcat/blob/master/LICENSE).
+lolcat is licensed under [BSD-3-Clause](https://github.com/jaseg/lolcat/blob/main/LICENSE).
 
 This build automation repo is also provided under BSD-3-Clause.

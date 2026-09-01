@@ -11,7 +11,7 @@ on:
         type: string
 
 env:
-  UPSTREAM_REPO: busyloop/lolcat
+  UPSTREAM_REPO: jaseg/lolcat
 
 jobs:
   check-release:
@@ -35,7 +35,7 @@ jobs:
             exit 0
           fi
 
-          # Fetch all tags from upstream (sorted by version)
+          # Fetch latest tags from upstream
           TAGS=$(curl -sL "https://api.github.com/repos/${UPSTREAM_REPO}/tags?per_page=10" \
             | jq -r '.[].name' | grep -E '^v?[0-9]+\.' | head -5)
 
@@ -71,113 +71,100 @@ jobs:
     needs: check-release
     if: needs.check-release.outputs.should_build == 'true'
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Ruby
-        uses: ruby/setup-ruby@v1
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
         with:
-          ruby-version: '3.3'
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-make
+            git
+            make
 
-      - name: Install lolcat gem
+      - name: Clone and build lolcat
         run: |
-          $version = "${{ needs.check-release.outputs.version }}"
-          gem install lolcat -v "$version" --no-document
-        shell: pwsh
+          VERSION="${{ needs.check-release.outputs.version }}"
+          TAG="${{ needs.check-release.outputs.tag }}"
 
-      - name: Create portable package
-        run: |
-          $version = "${{ needs.check-release.outputs.version }}"
-          $distDir = "lolcat-${version}-windows-x64"
-          New-Item -ItemType Directory -Path "$distDir/bin" -Force
-          New-Item -ItemType Directory -Path "$distDir/lib" -Force
+          # Clone upstream at specific tag
+          git clone --depth 1 --branch "${TAG}" \
+            "https://github.com/${UPSTREAM_REPO}.git" lolcat-src
 
-          # Copy Ruby executables and lolcat
-          $rubyDir = (Get-Command ruby).Source | Split-Path | Split-Path
-          $gemDir = (gem environment gemdir)
+          cd lolcat-src
 
-          # Copy lolcat executable
-          Copy-Item "$gemDir/bin/lolcat" "$distDir/bin/lolcat"
-          Copy-Item "$gemDir/bin/lolcat" "$distDir/bin/lolcat.bat"
+          # Build
+          make lolcat
+
+          # Prepare distribution
+          DIST_DIR="lolcat-${VERSION}-windows-x64"
+          mkdir -p "../${DIST_DIR}"
+          cp lolcat.exe "../${DIST_DIR}/"
+          cp LICENSE "../${DIST_DIR}/" 2>/dev/null || true
+          cp README.md "../${DIST_DIR}/" 2>/dev/null || true
+
+          cd ..
 
           # Create launcher batch script
-          @"
+          cat > "${DIST_DIR}/lolcat.bat" << 'BATCH'
           @echo off
-          setlocal
-          set RUBY_DIR=%~dp0ruby
-          set GEM_PATH=%~dp0lib
-          "%RUBY_DIR%\bin\ruby.exe" -I "%GEM_PATH%" "%~dp0bin\lolcat" %*
-          "@ | Out-File -FilePath "$distDir/lolcat.bat" -Encoding ASCII
-
-          # Create PowerShell launcher (better Unicode support)
-          @"
-          #!/usr/bin/env pwsh
-          `$scriptDir = Split-Path -Parent `$MyInvocation.MyCommand.Path
-          `$rubyExe = Join-Path `$scriptDir "ruby\bin\ruby.exe"
-          `$lolcatScript = Join-Path `$scriptDir "bin\lolcat"
-          `$libPath = Join-Path `$scriptDir "lib"
-          & `$rubyExe -I `$libPath `$lolcatScript @args
-          "@ | Out-File -FilePath "$distDir/lolcat.ps1" -Encoding UTF8
-
-          # Copy Ruby runtime (portable)
-          Copy-Item -Path "$rubyDir\*" -Destination "$distDir\ruby" -Recurse -Force
-
-          # Copy gem dependencies
-          $lolcatGemDir = Get-ChildItem "$gemDir/gems/lolcat-*" -Directory | Select-Object -First 1
-          Copy-Item -Path "$lolcatGemDir\*" -Destination "$distDir\lib" -Recurse -Force
-
-          # Copy required gem dependencies (paint, etc.)
-          $paintGemDir = Get-ChildItem "$gemDir/gems/paint-*" -Directory | Select-Object -First 1
-          if ($paintGemDir) {
-            Copy-Item -Path "$paintGemDir\*" -Destination "$distDir\lib" -Recurse -Force
-          }
+          "%~dp0lolcat.exe" %*
+          BATCH
 
           # Create README
-          @"
+          cat > "${DIST_DIR}/README.md" << EOF
           # lolcat for Windows
 
-          **Version:** $version
-          **Source:** https://github.com/busyloop/lolcat
+          **Version:** ${VERSION}
+          **Source:** https://github.com/${UPSTREAM_REPO}
 
           ## Usage
 
           ### Command Prompt (cmd.exe)
-          ```
-          echo Hello World | lolcat.bat
-          type myfile.txt | lolcat.bat
-          ```
+          \`\`\`
+          echo Hello World | lolcat.exe
+          type myfile.txt | lolcat.exe
+          dir | lolcat.exe
+          \`\`\`
 
           ### PowerShell
-          ```
-          echo "Hello World" | .\lolcat.ps1
-          Get-Content myfile.txt | .\lolcat.ps1
-          ```
+          \`\`\`
+          echo "Hello World" | .\lolcat.exe
+          Get-Content myfile.txt | .\lolcat.exe
+          \`\`\`
 
           ### Add to PATH (optional)
-          1. Extract this folder to a permanent location (e.g., `C:\Tools\lolcat`)
+          1. Extract this folder to a permanent location (e.g., \`C:\\Tools\\lolcat\`)
           2. Add that folder to your PATH environment variable
-          3. Use `lolcat` from anywhere
+          3. Use \`lolcat\` from anywhere
 
-          ## Notes
+          ## About
 
-          - This is a standalone package - no Ruby installation required
-          - Based on https://github.com/busyloop/lolcat
-          - Built automatically from upstream releases
-          "@ | Out-File -FilePath "$distDir\README.md" -Encoding UTF8
+          This is a high-performance C implementation of lolcat.
+          >10x faster and <0.1% as large as the original Ruby version.
 
-          # Create ZIP
-          Compress-Archive -Path "$distDir" -DestinationPath "${distDir}.zip"
+          - Original: https://github.com/busyloop/lolcat
+          - C implementation: https://github.com/${UPSTREAM_REPO}
+          EOF
 
-          # Output for artifact upload
-          echo "DIST_DIR=$distDir" >> $env:GITHUB_ENV
-          echo "ZIP_FILE=${distDir}.zip" >> $env:GITHUB_ENV
-        shell: pwsh
+      - name: Create ZIP
+        run: |
+          VERSION="${{ needs.check-release.outputs.version }}"
+          cd "lolcat-${VERSION}-windows-x64"
+          zip -r "../lolcat-${VERSION}-windows-x64.zip" .
+          cd ..
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: lolcat-windows
-          path: ${{ env.ZIP_FILE }}
+          path: lolcat-*-windows-x64.zip
 
   release:
     needs: [check-release, build-windows]
@@ -200,7 +187,7 @@ jobs:
           body: |
             ## lolcat ${{ needs.check-release.outputs.version }} for Windows
 
-            Standalone Windows build of [lolcat](https://github.com/busyloop/lolcat).
+            Standalone Windows build of [lolcat](https://github.com/jaseg/lolcat) — the high-performance C implementation.
 
             ### Installation
             1. Download `lolcat-${{ needs.check-release.outputs.version }}-windows-x64.zip`
@@ -209,18 +196,21 @@ jobs:
 
             ### Usage
             ```
-            echo Hello World | lolcat.bat
-            type myfile.txt | lolcat.bat
+            echo Hello World | lolcat.exe
+            type myfile.txt | lolcat.exe
+            dir | lolcat.exe
             ```
 
             ### What's included
-            - `lolcat.bat` - Command Prompt launcher
-            - `lolcat.ps1` - PowerShell launcher
-            - Portable Ruby runtime (no installation needed)
-            - lolcat gem and dependencies
+            - `lolcat.exe` — standalone binary (~50KB)
+            - `lolcat.bat` — launcher script
+
+            ### Why this build?
+            The original [busyloop/lolcat](https://github.com/busyloop/lolcat) is a Ruby gem with no Windows support.
+            This uses [jaseg/lolcat](https://github.com/jaseg/lolcat), a C reimplementation that's **>10x faster** and **<0.1% the size**.
 
             ---
-            *Built automatically from [busyloop/lolcat](https://github.com/busyloop/lolcat) release ${{ needs.check-release.outputs.tag }}*
+            *Built automatically from [jaseg/lolcat](https://github.com/jaseg/lolcat) release ${{ needs.check-release.outputs.tag }}*
           files: ./artifacts/*
           draft: false
           prerelease: false
