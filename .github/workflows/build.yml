@@ -1,0 +1,226 @@
+name: Build lolcat for Windows
+
+on:
+  schedule:
+    - cron: '0 3 * * *'  # Daily check at 03:00 UTC
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'lolcat version to build (leave empty for latest tag)'
+        required: false
+        type: string
+
+env:
+  UPSTREAM_REPO: busyloop/lolcat
+
+jobs:
+  check-release:
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+      version: ${{ steps.check.outputs.version }}
+      tag: ${{ steps.check.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check upstream for new tag
+        id: check
+        run: |
+          # Manual trigger override
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+            echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Fetch all tags from upstream (sorted by version)
+          TAGS=$(curl -sL "https://api.github.com/repos/${UPSTREAM_REPO}/tags?per_page=10" \
+            | jq -r '.[].name' | grep -E '^v?[0-9]+\.' | head -5)
+
+          if [ -z "$TAGS" ]; then
+            echo "No tags found upstream"
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Get latest tag
+          LATEST=$(echo "$TAGS" | head -1)
+          VERSION="${LATEST#v}"
+          TAG="v${VERSION}"
+
+          echo "Latest upstream tag: ${TAG}"
+
+          # Check if we already built this version
+          EXISTING=$(curl -sL \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${TAG}" \
+            | jq -r '.tag_name // empty')
+
+          if [ "$EXISTING" = "$TAG" ]; then
+            echo "Already built ${TAG}, skipping"
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "New version found: ${TAG}"
+            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+            echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-windows:
+    needs: check-release
+    if: needs.check-release.outputs.should_build == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+
+      - name: Install lolcat gem
+        run: |
+          $version = "${{ needs.check-release.outputs.version }}"
+          gem install lolcat -v "$version" --no-document
+        shell: pwsh
+
+      - name: Create portable package
+        run: |
+          $version = "${{ needs.check-release.outputs.version }}"
+          $distDir = "lolcat-${version}-windows-x64"
+          New-Item -ItemType Directory -Path "$distDir/bin" -Force
+          New-Item -ItemType Directory -Path "$distDir/lib" -Force
+
+          # Copy Ruby executables and lolcat
+          $rubyDir = (Get-Command ruby).Source | Split-Path | Split-Path
+          $gemDir = (gem environment gemdir)
+
+          # Copy lolcat executable
+          Copy-Item "$gemDir/bin/lolcat" "$distDir/bin/lolcat"
+          Copy-Item "$gemDir/bin/lolcat" "$distDir/bin/lolcat.bat"
+
+          # Create launcher batch script
+          @"
+          @echo off
+          setlocal
+          set RUBY_DIR=%~dp0ruby
+          set GEM_PATH=%~dp0lib
+          "%RUBY_DIR%\bin\ruby.exe" -I "%GEM_PATH%" "%~dp0bin\lolcat" %*
+          "@ | Out-File -FilePath "$distDir/lolcat.bat" -Encoding ASCII
+
+          # Create PowerShell launcher (better Unicode support)
+          @"
+          #!/usr/bin/env pwsh
+          `$scriptDir = Split-Path -Parent `$MyInvocation.MyCommand.Path
+          `$rubyExe = Join-Path `$scriptDir "ruby\bin\ruby.exe"
+          `$lolcatScript = Join-Path `$scriptDir "bin\lolcat"
+          `$libPath = Join-Path `$scriptDir "lib"
+          & `$rubyExe -I `$libPath `$lolcatScript @args
+          "@ | Out-File -FilePath "$distDir/lolcat.ps1" -Encoding UTF8
+
+          # Copy Ruby runtime (portable)
+          Copy-Item -Path "$rubyDir\*" -Destination "$distDir\ruby" -Recurse -Force
+
+          # Copy gem dependencies
+          $lolcatGemDir = Get-ChildItem "$gemDir/gems/lolcat-*" -Directory | Select-Object -First 1
+          Copy-Item -Path "$lolcatGemDir\*" -Destination "$distDir\lib" -Recurse -Force
+
+          # Copy required gem dependencies (paint, etc.)
+          $paintGemDir = Get-ChildItem "$gemDir/gems/paint-*" -Directory | Select-Object -First 1
+          if ($paintGemDir) {
+            Copy-Item -Path "$paintGemDir\*" -Destination "$distDir\lib" -Recurse -Force
+          }
+
+          # Create README
+          @"
+          # lolcat for Windows
+
+          **Version:** $version
+          **Source:** https://github.com/busyloop/lolcat
+
+          ## Usage
+
+          ### Command Prompt (cmd.exe)
+          ```
+          echo Hello World | lolcat.bat
+          type myfile.txt | lolcat.bat
+          ```
+
+          ### PowerShell
+          ```
+          echo "Hello World" | .\lolcat.ps1
+          Get-Content myfile.txt | .\lolcat.ps1
+          ```
+
+          ### Add to PATH (optional)
+          1. Extract this folder to a permanent location (e.g., `C:\Tools\lolcat`)
+          2. Add that folder to your PATH environment variable
+          3. Use `lolcat` from anywhere
+
+          ## Notes
+
+          - This is a standalone package - no Ruby installation required
+          - Based on https://github.com/busyloop/lolcat
+          - Built automatically from upstream releases
+          "@ | Out-File -FilePath "$distDir\README.md" -Encoding UTF8
+
+          # Create ZIP
+          Compress-Archive -Path "$distDir" -DestinationPath "${distDir}.zip"
+
+          # Output for artifact upload
+          echo "DIST_DIR=$distDir" >> $env:GITHUB_ENV
+          echo "ZIP_FILE=${distDir}.zip" >> $env:GITHUB_ENV
+        shell: pwsh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lolcat-windows
+          path: ${{ env.ZIP_FILE }}
+
+  release:
+    needs: [check-release, build-windows]
+    if: needs.check-release.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: lolcat-windows
+          path: ./artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.check-release.outputs.tag }}
+          name: "lolcat ${{ needs.check-release.outputs.version }} (Windows)"
+          body: |
+            ## lolcat ${{ needs.check-release.outputs.version }} for Windows
+
+            Standalone Windows build of [lolcat](https://github.com/busyloop/lolcat).
+
+            ### Installation
+            1. Download `lolcat-${{ needs.check-release.outputs.version }}-windows-x64.zip`
+            2. Extract to a folder (e.g., `C:\Tools\lolcat`)
+            3. Add folder to PATH (optional)
+
+            ### Usage
+            ```
+            echo Hello World | lolcat.bat
+            type myfile.txt | lolcat.bat
+            ```
+
+            ### What's included
+            - `lolcat.bat` - Command Prompt launcher
+            - `lolcat.ps1` - PowerShell launcher
+            - Portable Ruby runtime (no installation needed)
+            - lolcat gem and dependencies
+
+            ---
+            *Built automatically from [busyloop/lolcat](https://github.com/busyloop/lolcat) release ${{ needs.check-release.outputs.tag }}*
+          files: ./artifacts/*
+          draft: false
+          prerelease: false

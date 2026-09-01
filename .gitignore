@@ -1,0 +1,19 @@
+# Build artifacts
+*.zip
+lolcat-*/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Ruby
+*.gem
+.bundle/
+vendor/
